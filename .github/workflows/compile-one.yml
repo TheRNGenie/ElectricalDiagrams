@@ -1,0 +1,95 @@
+name: Compile one sketch
+run-name: Compile ${{ inputs.sketch }} (${{ inputs.build_id }})
+
+# Started by the Code tab in Board Monitor. Compiles a single sketch for the UNO R4 WiFi
+# and commits its compiler output to bin/<sketch>.log and, when it builds, bin/<sketch>.bin.
+# The page finds this run by build_id, then reads both files back through the GitHub API.
+on:
+  workflow_dispatch:
+    inputs:
+      sketch:
+        description: Folder name in sketches/
+        required: true
+        default: my_sketch
+      build_id:
+        description: Id the page uses to find this run
+        required: false
+        default: manual
+
+permissions:
+  contents: write
+
+concurrency:
+  group: compile-one-${{ inputs.sketch }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SKETCH: ${{ inputs.sketch }}
+      BUILD_ID: ${{ inputs.build_id }}
+    steps:
+      - name: Check sketch name
+        run: |
+          [[ "$SKETCH" =~ ^[A-Za-z][A-Za-z0-9_]{0,62}$ ]] || { echo "::error::Bad sketch name: $SKETCH"; exit 1; }
+          [[ "$BUILD_ID" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || { echo "::error::Bad build id"; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Restore board core and libraries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15
+            ~/Arduino/libraries
+          key: arduino-renesas-${{ hashFiles('.github/workflows/compile-one.yml', 'sketches/*/libraries.txt') }}
+          restore-keys: arduino-renesas-
+      - name: Install board core and libraries
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:renesas_uno
+          arduino-cli lib install "DHT sensor library" "Adafruit Unified Sensor" "Adafruit SSD1306" "Adafruit GFX Library" "IRremote" "MFRC522" "Keypad" "Servo" "Stepper"
+          # extra libraries a sketch asks for, one name per line
+          if [ -f "sketches/$SKETCH/libraries.txt" ]; then
+            while IFS= read -r lib || [ -n "$lib" ]; do
+              lib="${lib%$'\r'}"; [ -n "$lib" ] && arduino-cli lib install "$lib"
+            done < "sketches/$SKETCH/libraries.txt"
+          fi
+      - name: Compile
+        id: compile
+        run: |
+          mkdir -p bin
+          log="bin/$SKETCH.log"
+          if [ ! -d "sketches/$SKETCH" ]; then
+            printf 'build_id=%s\nresult=failed\n\nThere is no sketches/%s folder.\n' "$BUILD_ID" "$SKETCH" > "$log"
+            echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          set +e
+          arduino-cli compile --fqbn arduino:renesas_uno:unor4wifi --warnings default \
+            --output-dir "build/$SKETCH" "sketches/$SKETCH" > out.txt 2>&1
+          status=$?
+          set -e
+          cat out.txt
+          if [ $status -eq 0 ]; then
+            cp "build/$SKETCH/$SKETCH.ino.bin" "bin/$SKETCH.bin"; result=ok
+          else
+            result=failed
+          fi
+          { printf 'build_id=%s\nresult=%s\n\n' "$BUILD_ID" "$result"; sed "s|$GITHUB_WORKSPACE/||g" out.txt; } > "$log"
+          echo "ok=$([ $result = ok ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bin
+          git diff --cached --quiet && exit 0
+          git commit -m "Compile $SKETCH [skip ci]"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin "$GITHUB_REF_NAME" && git push origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            sleep $((i * 3))
+          done
+          exit 1
+      - name: Report
+        if: steps.compile.outputs.ok != 'true'
+        run: |
+          echo "::error::$SKETCH did not compile. See bin/$SKETCH.log"
+          exit 1

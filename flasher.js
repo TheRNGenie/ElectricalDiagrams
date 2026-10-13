@@ -97,5 +97,15 @@ window.R4Flasher = (() => {
     }
   }
 
-  return { flash, crc16 };
+  // Takes the port from the monitor (or asks for one) and uploads. onStatus(text, fraction 0..1)
+  async function uploadToBoard(bin, onStatus = () => {}) {
+    if (!('serial' in navigator)) throw new Error('Uploading needs Web Serial, which this browser doesn’t have. Use Chrome on Android or a computer.');
+    await window.boardMonitor.release();
+    let port = window.boardMonitor.port || (await navigator.serial.getPorts())[0];
+    if (!port) { onStatus('Pick the board in the list that opens.', 0); port = await navigator.serial.requestPort(); }
+    window.boardMonitor.port = port;
+    await flash(port, bin, onStatus);
+  }
+
+  return { flash, uploadToBoard, crc16 };
 })();

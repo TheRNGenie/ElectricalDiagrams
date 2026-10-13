@@ -22,6 +22,13 @@ jobs:
           arduino-cli core update-index
           arduino-cli core install arduino:renesas_uno
           arduino-cli lib install "DHT sensor library" "Adafruit Unified Sensor" "Adafruit SSD1306" "Adafruit GFX Library" "IRremote" "MFRC522" "Keypad" "Servo" "Stepper"
+          # extra libraries a sketch asks for, one name per line in sketches/<name>/libraries.txt
+          for f in sketches/*/libraries.txt; do
+            [ -f "$f" ] || continue
+            while IFS= read -r lib || [ -n "$lib" ]; do
+              lib="${lib%$'\r'}"; [ -n "$lib" ] && arduino-cli lib install "$lib"
+            done < "$f"
+          done
       - name: Compile
         run: |
           mkdir -p bin
@@ -44,4 +51,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add bin
-          git diff --cached --quiet || (git commit -m "Update compiled sketches [skip ci]" && git push)
+          git diff --cached --quiet && exit 0
+          git commit -m "Update compiled sketches [skip ci]"
+          # the Code tab's builds may push at the same time
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep $((i * 3))
+          done
+          exit 1
