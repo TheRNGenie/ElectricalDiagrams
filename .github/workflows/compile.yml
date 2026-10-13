@@ -21,7 +21,7 @@ jobs:
         run: |
           arduino-cli core update-index
           arduino-cli core install arduino:renesas_uno
-          arduino-cli lib install "DHT sensor library" "Adafruit Unified Sensor" "Adafruit SSD1306" "Adafruit GFX Library" "IRremote" "MFRC522" "Keypad"
+          arduino-cli lib install "DHT sensor library" "Adafruit Unified Sensor" "Adafruit SSD1306" "Adafruit GFX Library" "IRremote" "MFRC522" "Keypad" "Servo" "Stepper"
       - name: Compile
         run: |
           mkdir -p bin

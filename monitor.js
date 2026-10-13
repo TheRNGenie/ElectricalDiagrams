@@ -5,6 +5,7 @@ const MAXPTS = 300, MAXLINES = 1000;
 let link = null;           // {write(str), close()}
 let demoTimer = null;
 let buf = '';
+let lastPort = null;      // remembered so the uploader can reuse it
 const series = new Map();  // name -> {vals:[], color}
 const palette = ['--s1','--s2','--s3','--s4','--s5','--s6'];
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -116,8 +117,10 @@ addEventListener('resize', draw);
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', draw);
 
 // ---------- Web Serial ----------
-async function connectSerial(){
-  const port = await navigator.serial.requestPort();
+function connectSerialWith(known){ return () => connectSerial(known); }
+async function connectSerial(known){
+  const port = known || await navigator.serial.requestPort();
+  lastPort = port;
   await port.open({ baudRate: +$('baud').value });
   const reader = port.readable.getReader(); const writer = port.writable.getWriter();
   const dec = new TextDecoder(); let open = true;
@@ -199,6 +202,14 @@ function startDemo(){
   },150);
 }
 $('demo').onclick=()=> demoTimer ? stopDemo() : startDemo();
+
+// Lets the uploader take over the USB port
+window.boardMonitor = {
+  async release(){ stopDemo(); const l=link; link=null; if(l){ await l.close(); connected(false); setState('Not connected'); logLine('Disconnected for upload','sys'); } },
+  get port(){ return lastPort; },
+  set port(p){ lastPort = p; },
+  connectUSB(){ return start(connectSerialWith(lastPort)); }
+};
 
 tab('usb'); requestAnimationFrame(frame); draw(); startDemo();
 })();

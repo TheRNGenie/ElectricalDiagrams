@@ -250,7 +250,13 @@ function select(id, scroll) {
     const copy = document.createElement('button'); copy.textContent = 'Copy sketch';
     const mon = document.createElement('button'); mon.className = 'primary'; mon.textContent = 'Open monitor';
     mon.onclick = () => { show('monitor'); scrollTo(0, 0); };
-    btns.append(copy, mon); ch.append(btns); d.append(ch);
+    const up = document.createElement('button'); up.className = 'primary'; up.textContent = 'Upload to board';
+    mon.className = '';
+    btns.append(up, copy, mon); ch.append(btns); d.append(ch);
+    const ustat = document.createElement('div'); ustat.className = 'upload'; ustat.hidden = true;
+    ustat.innerHTML = '<progress max="1" value="0"></progress><p class="note"></p>';
+    d.append(ustat);
+    up.onclick = () => upload(part, up, ustat);
     if (part.libs?.length) {
       const p = document.createElement('p'); p.className = 'note';
       p.textContent = 'Install first (Arduino IDE → Tools → Manage Libraries): ' + part.libs.join('; ') + '.';
@@ -272,6 +278,31 @@ function select(id, scroll) {
   }
   finish(scroll);
 }
+// ---------- Upload ----------
+const sketchName = part => part.id === '595' ? 'shift595' : part.id.replace(/[^a-z0-9]/g, '_');
+async function upload(part, btn, box) {
+  const bar = box.querySelector('progress'), msg = box.querySelector('p');
+  const say = (t, frac, err) => { msg.textContent = t; msg.className = 'note' + (err ? ' err' : ''); if (frac != null) bar.value = frac; };
+  box.hidden = false; bar.value = 0;
+  if (!('serial' in navigator)) { say('Uploading needs Web Serial, which this browser doesn’t have. Use Chrome on Android or a computer.', 0, true); return; }
+  btn.disabled = true;
+  try {
+    say('Downloading the compiled sketch…', 0);
+    const res = await fetch('bin/' + sketchName(part) + '.bin', { cache: 'no-cache' });
+    if (!res.ok) throw new Error('The compiled sketch isn’t available yet. It appears a few minutes after the repo builds it.');
+    const bin = new Uint8Array(await res.arrayBuffer());
+    await window.boardMonitor.release();
+    let port = window.boardMonitor.port || (await navigator.serial.getPorts())[0];
+    if (!port) { say('Pick the board in the list that opens.', 0); port = await navigator.serial.requestPort(); }
+    window.boardMonitor.port = port;
+    await window.R4Flasher.flash(port, bin, (t, f) => say(t, f));
+    say('Uploaded. Open the monitor to see its readings.', 1);
+  } catch (e) {
+    if (e && e.name === 'NotFoundError') say('No board picked.', 0, true);
+    else say(e.message || String(e), null, true);
+  } finally { btn.disabled = false; }
+}
+
 function finish(scroll) {
   try { localStorage.setItem('bm-part', current); } catch {}
   if (scroll && matchMedia('(max-width: 679px)').matches) $('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });

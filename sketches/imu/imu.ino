@@ -1,7 +1,7 @@
 // MPU-6500 on I2C (address 0x68), read directly with Wire
 #include <Wire.h>
 
-const uint8_t MPU = 0x68;
+const uint8_t IMU_ADDR = 0x68;   // (the name MPU is taken by the R4 core)
 
 int16_t read16() {
   uint8_t hi = Wire.read();
@@ -12,17 +12,17 @@ int16_t read16() {
 void setup() {
   Serial.begin(115200);
   Wire.begin();
-  Wire.beginTransmission(MPU);
+  Wire.beginTransmission(IMU_ADDR);
   Wire.write(0x6B);   // power management: wake up
   Wire.write(0);
   Wire.endTransmission();
 }
 
 void loop() {
-  Wire.beginTransmission(MPU);
+  Wire.beginTransmission(IMU_ADDR);
   Wire.write(0x3B);   // first data register
   Wire.endTransmission(false);
-  Wire.requestFrom(MPU, (size_t)14);
+  Wire.requestFrom(IMU_ADDR, (size_t)14);
   float ax = read16() / 16384.0, ay = read16() / 16384.0, az = read16() / 16384.0;
   read16();           // skip temperature
   float gx = read16() / 131.0, gy = read16() / 131.0, gz = read16() / 131.0;
