@@ -217,6 +217,12 @@ function select(id, scroll) {
   head.innerHTML = `<div class="label">${esc(part.cat)}</div><h2>${esc(part.name)}</h2>`;
   d.append(head);
   const what = document.createElement('p'); what.textContent = part.what; d.append(what);
+  if (part.src && part.code == null) {
+    // sketch kept as a file in the repo: load it, then draw the page again
+    fetch(part.src, { cache: 'no-cache' }).then(r => r.ok ? r.text() : Promise.reject())
+      .then(t => { part.code = t; }, () => { part.code = '// Could not load ' + part.src + '. It loads once the page is served from GitHub Pages.'; })
+      .then(() => { if (current === part.id) select(part.id, false); });
+  }
   if (part.info) { const b = document.createElement('div'); b.className = 'view'; b.innerHTML = BASICS; d.append(b); finish(scroll); return; }
 
   if (part.need) {
@@ -226,6 +232,7 @@ function select(id, scroll) {
   }
   if (part.warn) { const w = document.createElement('div'); w.className = 'warn'; w.textContent = part.warn; d.append(w); }
 
+  if (part.blocks) {
   const lab = document.createElement('div'); lab.className = 'label'; lab.textContent = 'Wiring diagram'; d.append(lab);
   const box = document.createElement('div'); box.className = 'diagram'; box.append(diagram(part)); d.append(box);
   const legend = document.createElement('div'); legend.className = 'legend';
@@ -236,6 +243,7 @@ function select(id, scroll) {
 
   const lab2 = document.createElement('div'); lab2.className = 'label'; lab2.textContent = 'Connections'; d.append(lab2);
   const t = document.createElement('div'); t.innerHTML = pinTable(part); d.append(t);
+  }
 
   if (part.notes?.length) {
     const ul = document.createElement('ul'); ul.className = 'notes';
@@ -356,7 +364,7 @@ function list() {
       row.setAttribute('aria-selected', p.id === current);
       const b = document.createElement('button'); b.textContent = p.name; b.onclick = () => select(p.id, true);
       row.append(b);
-      if (!p.info && !p.psu) {
+      if (!p.info && !p.psu && p.wires) {
         const l = document.createElement('label');
         const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'add-' + p.id; cb.checked = build.has(p.id);
         cb.onchange = () => { cb.checked ? build.add(p.id) : build.delete(p.id); planner(); };

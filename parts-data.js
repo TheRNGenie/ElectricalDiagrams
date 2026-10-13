@@ -811,6 +811,12 @@ void loop() {
   notes:['Set both yellow jumpers on the module to 5V, not 3.3V.','Line the module’s + and − pins up with the breadboard’s red and blue rails.'],
   code:'' },
 
+/* ---------------- Your code ---------------- */
+{ id:'my-sketch', name:'My sketch', cat:'Your code', src:'sketches/my_sketch/my_sketch.ino',
+  what:'Your own code. Edit sketches/my_sketch/my_sketch.ino in the GitHub app or github.com on your phone and commit. GitHub compiles it in a few minutes, then Upload to board puts it on the R4.',
+  need:['GitHub app or github.com'], reads:[],
+  notes:['Print readings as name=value pairs (like temp=23.4,hum=51) at 115200 baud and the monitor plots them.','If it doesn’t compile, open the repo’s Actions tab to see the error. The last working version stays available to upload.','To check a new upload, reload this page first so it picks up the newest build.'] },
+
 /* ---------------- Basics ---------------- */
 { id:'basics', name:'Resistors, diodes & transistors', cat:'Basics',
   what:'How to pick out the helper parts used in the diagrams.', reads:[], info:true }
