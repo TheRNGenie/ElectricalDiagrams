@@ -5,18 +5,20 @@ const RAILS = new Set(['5V', 'GND']);
 const NS = 'http://www.w3.org/2000/svg';
 
 // ---------- Views ----------
+const VIEWS = ['monitor', 'parts', 'code'];
 function show(view) {
-  $('view-monitor').hidden = view !== 'monitor';
-  $('view-parts').hidden = view !== 'parts';
-  $('nav-monitor').toggleAttribute('aria-current', view === 'monitor');
-  $('nav-parts').toggleAttribute('aria-current', view === 'parts');
-  if (view === 'monitor') $('nav-monitor').setAttribute('aria-current', 'page');
-  if (view === 'parts') $('nav-parts').setAttribute('aria-current', 'page');
+  if (!VIEWS.includes(view)) view = 'monitor';
+  for (const v of VIEWS) {
+    $('view-' + v).hidden = v !== view;
+    if (v === view) $('nav-' + v).setAttribute('aria-current', 'page'); else $('nav-' + v).removeAttribute('aria-current');
+  }
   try { localStorage.setItem('bm-view', view); } catch {}
   if (view === 'monitor') dispatchEvent(new Event('resize'));
 }
+window.showView = show;
 $('nav-monitor').onclick = () => show('monitor');
 $('nav-parts').onclick = () => show('parts');
+$('nav-code').onclick = () => show('code');
 
 // ---------- Helpers ----------
 const pinId = p => Array.isArray(p) ? p[0] : p;
@@ -260,7 +262,9 @@ function select(id, scroll) {
     mon.onclick = () => { show('monitor'); scrollTo(0, 0); };
     const up = document.createElement('button'); up.className = 'primary'; up.textContent = 'Upload to board';
     mon.className = '';
-    btns.append(up, copy, mon); ch.append(btns); d.append(ch);
+    const edit = document.createElement('button'); edit.textContent = 'Edit & compile';
+    edit.onclick = () => window.codeEditor.open(sketchName(part));
+    btns.append(up, edit, copy, mon); ch.append(btns); d.append(ch);
     const ustat = document.createElement('div'); ustat.className = 'upload'; ustat.hidden = true;
     ustat.innerHTML = '<progress max="1" value="0"></progress><p class="note"></p>';
     d.append(ustat);
@@ -299,11 +303,7 @@ async function upload(part, btn, box) {
     const res = await fetch('bin/' + sketchName(part) + '.bin', { cache: 'no-cache' });
     if (!res.ok) throw new Error('The compiled sketch isn’t available yet. It appears a few minutes after the repo builds it.');
     const bin = new Uint8Array(await res.arrayBuffer());
-    await window.boardMonitor.release();
-    let port = window.boardMonitor.port || (await navigator.serial.getPorts())[0];
-    if (!port) { say('Pick the board in the list that opens.', 0); port = await navigator.serial.requestPort(); }
-    window.boardMonitor.port = port;
-    await window.R4Flasher.flash(port, bin, (t, f) => say(t, f));
+    await window.R4Flasher.uploadToBoard(bin, (t, f) => say(t, f));
     say('Uploaded. Open the monitor to see its readings.', 1);
   } catch (e) {
     if (e && e.name === 'NotFoundError') say('No board picked.', 0, true);
@@ -380,7 +380,7 @@ $('search').oninput = list;
 // ---------- Start ----------
 let startPart = 'dht11', startView = 'monitor';
 try { startPart = localStorage.getItem('bm-part') || startPart; startView = localStorage.getItem('bm-view') || startView; } catch {}
-if (location.hash === '#parts') startView = 'parts';
+if (location.hash === '#parts' || location.hash === '#code') startView = location.hash.slice(1);
 current = startPart;
 list();
 select(startPart, false);
