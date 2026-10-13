@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Board Monitor</title>
+<meta name="description" content="Read an Arduino UNO R4 WiFi over USB or WiFi, and wire up every part in the ELEGOO kit.">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<main>
+  <header>
+    <h1>Board Monitor</h1>
+    <span id="state" class="pill">Not connected</span>
+  </header>
+  <nav class="nav" aria-label="Views">
+    <button id="nav-monitor" aria-current="page">Monitor</button>
+    <button id="nav-parts">Parts &amp; wiring</button>
+  </nav>
+
+  <div id="view-monitor" class="view">
+  
+
+  <section id="s-conn" aria-label="Connection">
+    <div class="tabs" role="tablist">
+      <button id="tab-usb" role="tab" aria-selected="true">USB cable</button>
+      <button id="tab-wifi" role="tab" aria-selected="false">WiFi</button>
+    </div>
+    <div id="pane-usb" class="row">
+      <select id="baud" aria-label="Baud rate">
+        <option>9600</option><option>19200</option><option>38400</option><option>57600</option>
+        <option selected>115200</option><option>230400</option><option>460800</option><option>921600</option>
+      </select>
+      <button id="usb-connect" class="primary">Connect USB</button>
+    </div>
+    <div id="pane-wifi" class="row" hidden>
+      <input id="wsurl" type="url" placeholder="ws://192.168.4.1/ws" value="ws://192.168.4.1/ws" aria-label="Board WebSocket address">
+      <button id="ws-connect" class="primary">Connect WiFi</button>
+    </div>
+    <div class="row">
+      <button id="disconnect" disabled>Disconnect</button>
+      <button id="demo">Run demo data</button>
+    </div>
+    <p id="hint" class="note"></p>
+  </section>
+
+  <section id="s-vals" aria-label="Latest values">
+    <div class="label">Latest values</div>
+    <div id="readouts" class="readouts"><div class="empty">Numbers in incoming lines show up here, like <code>temp=23.4,hum=51</code> or <code>23.4,51</code>.</div></div>
+  </section>
+
+  <section id="s-plot" aria-label="Plot">
+    <div class="row" style="justify-content:space-between">
+      <div class="label">Plot · last <span id="npts">300</span> samples</div>
+      <label class="toggle"><input id="paused" type="checkbox"> Pause</label>
+    </div>
+    <canvas id="plot" aria-label="Live plot of numeric values"></canvas>
+  </section>
+
+  <section id="s-log" aria-label="Serial output">
+    <div class="row" style="justify-content:space-between">
+      <div class="label">Serial output</div>
+      <div class="row">
+        <label class="toggle"><input id="ts" type="checkbox" checked> Time</label>
+        <label class="toggle"><input id="autoscroll" type="checkbox" checked> Follow</label>
+        <button id="clear">Clear</button>
+      </div>
+    </div>
+    <div id="log" role="log" aria-live="off"></div>
+    <form id="sendform" class="row">
+      <input id="cmd" type="text" placeholder="Send a command" autocomplete="off" autocapitalize="off" aria-label="Command to send">
+      <select id="eol" aria-label="Line ending">
+        <option value="\n" selected>LF</option><option value="\r\n">CR+LF</option><option value="\r">CR</option><option value="">None</option>
+      </select>
+      <button class="primary" type="submit">Send</button>
+    </form>
+  </section>
+  </div>
+
+  <div id="view-parts" class="view" hidden>
+    <section id="parts-nav" aria-label="Kit parts">
+      <input id="search" type="text" placeholder="Search parts" autocomplete="off" aria-label="Search parts">
+      <div id="plist" class="plist"></div>
+    </section>
+    <div class="view" style="min-width:0">
+      <section id="planner" aria-label="Build planner" hidden></section>
+      <section id="detail" class="detail" aria-live="polite"></section>
+    </div>
+  </div>
+</main>
+<script src="parts-data.js"></script>
+<script src="monitor.js"></script>
+<script src="parts.js"></script>
+</body>
+</html>
