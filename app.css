@@ -128,9 +128,6 @@ svg .pin{fill:var(--panel);stroke:var(--ink);stroke-width:1.2}
 .upload progress{width:100%;height:10px;accent-color:var(--accent)}
 
 /* ---------- Code ---------- */
-.ghform{display:flex;flex-direction:column;gap:10px}
-.ghform a{color:var(--accent);font-weight:600}
-#gh-token{width:100%}
 button.link{border:0;background:none;padding:0;min-height:0;color:var(--accent);font:inherit;font-weight:600;text-decoration:underline}
 .editor{display:flex;border:1px solid var(--line);border-radius:8px;background:var(--bg);overflow:hidden;height:clamp(220px,58dvh,680px)}
 #gutter,#code{font:13px/1.5 var(--mono);padding-top:8px}
@@ -146,10 +143,11 @@ button.link{border:0;background:none;padding:0;min-height:0;color:var(--accent);
 .keys button{flex:none;min-width:40px;min-height:40px;padding:4px 8px;font:600 16px var(--mono)}
 .edmeta{justify-content:space-between;font:12px var(--mono);color:var(--muted)}
 .libs summary,#b-logbox summary{cursor:pointer;font-weight:600;font-size:14px;padding:4px 0}
-#libs{width:100%;font:13px/1.5 var(--mono);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:6px;resize:vertical}
+.sktools button{min-height:36px;padding:6px 10px;font-size:13.5px}
+.libs-list{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px;font-size:13.5px}
+.libs-list code{font:12px var(--mono);color:var(--muted);word-break:break-word}
 #s-out progress{width:100%;height:8px;accent-color:var(--accent)}
 .note.okline{color:var(--accent);font-weight:600}
-#b-run{color:var(--accent);font-weight:600}
 .problems{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .problems:empty{display:none}
 .problems li{border-left:3px solid var(--bad);background:var(--bg);border-radius:6px}
@@ -164,6 +162,5 @@ button.prob:active{background:var(--part)}
 #b-log{max-height:300px;white-space:pre-wrap;word-break:break-word}
 @media (min-width:680px){
   #view-code{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);align-items:start}
-  #s-gh{grid-column:1/-1}
   #s-out{position:sticky;top:calc(env(safe-area-inset-top,0px) + 8px)}
 }

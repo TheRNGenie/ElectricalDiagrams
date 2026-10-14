@@ -1,4 +1,4 @@
-// My sketch: edit this file in GitHub, commit, then use "Upload to board" in Board Monitor.
+// My sketch: edit it in the Code tab of Board Monitor, then Compile & upload.
 // Prints one line of name=value pairs every 200 ms so Board Monitor can plot it,
 // and answers a few text commands sent from the page.
 //

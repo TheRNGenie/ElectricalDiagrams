@@ -1,11 +1,10 @@
 name: Export board core for the in-app compiler
 
 # Collects the UNO R4 WiFi core, libraries and the gcc runtime libraries (hard-float Cortex-M4)
-# plus a verbose reference build, and commits them to tools/raw/ on this branch.
+# plus verbose reference builds, and commits them to tools/raw/ on the branch it runs on.
+# tools/build-pack.mjs turns that export into compiler/pack.tar.gz (see compiler/README.md).
 on:
-  push:
-    branches: [claude/project-thread-16bnck]
-    paths: ['.github/workflows/export-core.yml']
+  workflow_dispatch:
 
 permissions:
   contents: write
