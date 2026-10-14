@@ -25,7 +25,7 @@ function capHint(){
     else if ('usb' in navigator) hint('Plug the board in, then tap Connect USB. This browser uses WebUSB, which works with boards that have native USB (ESP32-S2/S3, Pico, Leonardo). Boards with a CH340 or CP2102 chip need Web Serial (recent Chrome).');
     else hint('This browser can’t reach USB. Use Chrome on Android or a desktop, or switch to WiFi.', true);
   } else {
-    hint(location.protocol==='https:' && $('wsurl').value.startsWith('ws:')
+    hint(location.protocol==='https:' && !window.AndroidUsb && $('wsurl').value.startsWith('ws:')
       ? 'This page is on https, so the browser blocks plain ws:// links. Open the page from the board itself, or use wss://.'
       : 'Enter the WebSocket address your board serves, then tap Connect WiFi.');
   }

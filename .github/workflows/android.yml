@@ -1,0 +1,57 @@
+name: Android app
+
+# Builds Board Monitor as an Android app (android/) with the whole page, compiler included,
+# packed inside the APK. Pushes to main update the "android" release, so this link always
+# gives the newest app:
+#   https://github.com/TheRNGenie/ElectricalDiagrams/releases/download/android/BoardMonitor.apk
+# Other branches publish a test build to the "android-test" release.
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths-ignore: ['README.md', 'compiler/README.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Put the page and compiler inside the app
+        run: android/sync-web.sh
+      - name: Build the APK
+        working-directory: android
+        run: gradle --no-daemon assembleRelease -PversionCode=${{ github.run_number }}
+      - name: Collect
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk BoardMonitor.apk
+          ls -l BoardMonitor.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BoardMonitor-apk
+          path: BoardMonitor.apk
+      - name: Publish the download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF_NAME" = main ]; then
+            tag=android; title="Board Monitor for Android"; pre=""
+          else
+            tag=android-test; title="Board Monitor for Android (test build)"; pre="--prerelease"
+          fi
+          notes="Built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}. Download BoardMonitor.apk on the phone and open it to install."
+          gh release delete "$tag" --yes --cleanup-tag || true
+          gh release create "$tag" BoardMonitor.apk --target "$GITHUB_SHA" --title "$title" --notes "$notes" $pre

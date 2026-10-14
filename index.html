@@ -143,6 +143,7 @@
     </section>
   </div>
 </main>
+<script src="native-bridge.js"></script>
 <script src="parts-data.js"></script>
 <script src="sketches.js"></script>
 <script src="monitor.js"></script>
@@ -150,8 +151,8 @@
 <script src="parts.js"></script>
 <script src="editor.js"></script>
 <script>
-// Keeps the app and the compiler on the phone so it works offline
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
+// Keeps the app and the compiler on the phone so it works offline (the Android app has them built in)
+if ('serviceWorker' in navigator && !window.AndroidUsb && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
 </html>
