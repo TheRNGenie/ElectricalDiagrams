@@ -813,9 +813,9 @@ void loop() {
 
 /* ---------------- Your code ---------------- */
 { id:'my-sketch', name:'My sketch', cat:'Your code', src:'sketches/my_sketch/my_sketch.ino',
-  what:'Your own code. Tap Edit & compile to change it in the Code tab: it compiles on GitHub in a minute or two, shows any errors against your lines, and uploads to the R4 over USB.',
-  need:['A GitHub token (the Code tab walks you through it)'], reads:[],
-  notes:['Print readings as name=value pairs (like temp=23.4,hum=51) at 115200 baud and the monitor plots them.','If it doesn’t compile, the last working version stays available to upload.','Upload to board here uses the version the Pages site last published; the Code tab uploads its own build straight away.'] },
+  what:'Your own code. Tap Edit & compile to change it in the Code tab: it compiles right on the phone, shows any errors against your lines, and uploads to the R4 over USB.',
+  need:['USB cable to the phone'], reads:[],
+  notes:['Print readings as name=value pairs (like temp=23.4,hum=51) at 115200 baud and the monitor plots them.','Your edits are saved on this phone. Upload to board here sends the original version; the Code tab uploads your edited one.'] },
 
 /* ---------------- Basics ---------------- */
 { id:'basics', name:'Resistors, diodes & transistors', cat:'Basics',

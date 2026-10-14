@@ -6,6 +6,9 @@
 <title>Board Monitor</title>
 <meta name="description" content="Read an Arduino UNO R4 WiFi over USB or WiFi, and wire up every part in the ELEGOO kit.">
 <link rel="stylesheet" href="app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b7a5c">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 </head>
 <body>
 <main>
@@ -89,45 +92,23 @@
     </div>
   </div>
   <div id="view-code" class="view" hidden>
-    <section id="s-gh" aria-label="GitHub connection">
-      <div id="gh-summary" class="row" style="justify-content:space-between" hidden>
-        <div class="note">Compiling on GitHub for <b id="gh-who"></b></div>
-        <button id="gh-change" type="button">GitHub settings</button>
-      </div>
-      <form id="gh-form" class="ghform">
-        <div class="label">Connect GitHub to compile</div>
-        <p class="note">Sketches are saved to your repo and compiled there by GitHub Actions, then uploaded to the board from this page. That needs a GitHub token.</p>
-        <ol class="notes">
-          <li><a id="gh-new" target="_blank" rel="noopener">Create a fine-grained token</a>.</li>
-          <li>Under Repository access pick <b>Only select repositories</b> and choose this repo.</li>
-          <li>Under Permissions set <b>Contents</b> and <b>Actions</b> to <b>Read and write</b>.</li>
-          <li>Generate it, copy it, and paste it here.</li>
-        </ol>
-        <input id="gh-token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="GitHub token">
-        <div class="row">
-          <input id="gh-repo" type="text" autocapitalize="off" spellcheck="false" aria-label="Repository (owner/name)" style="flex:2 1 180px">
-          <input id="gh-branch" type="text" autocapitalize="off" spellcheck="false" aria-label="Branch" style="flex:1 1 80px">
-        </div>
-        <div class="row">
-          <button class="primary" type="submit">Save</button>
-          <button id="gh-forget" type="button">Remove token</button>
-        </div>
-        <p id="gh-note" class="note"></p>
-        <p class="note">The token stays in this browser on this phone and is only sent to api.github.com.</p>
-      </form>
-    </section>
-
-    <section id="s-editor" aria-label="Sketch editor" hidden>
+    <section id="s-editor" aria-label="Sketch editor">
       <div class="row">
         <select id="sk-pick" aria-label="Sketch" style="flex:1 1 160px"></select>
-        <button id="sk-new" type="button">New sketch</button>
+        <button id="sk-new" type="button">New</button>
+      </div>
+      <div class="row sktools">
+        <button id="sk-import" type="button">Open .ino file</button>
+        <button id="sk-export" type="button">Save as .ino</button>
+        <button id="sk-reset" type="button" hidden>Back to kit version</button>
+        <button id="sk-delete" type="button" hidden>Delete</button>
+        <input id="sk-file" type="file" accept=".ino,.cpp,.txt,text/plain" hidden>
       </div>
       <form id="newrow" class="row" hidden>
         <input id="newname" type="text" placeholder="Name, like plant_watering" autocapitalize="off" autocomplete="off" spellcheck="false" aria-label="New sketch name">
         <button class="primary" type="submit">Create</button>
         <p id="newnote" class="note err" style="flex-basis:100%"></p>
       </form>
-      <p id="ed-draft" class="note" hidden>Your unsaved edits were restored. <button id="ed-discard" type="button" class="link">Discard them</button></p>
       <div class="editor">
         <div id="gutter" aria-hidden="true"></div>
         <textarea id="code" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Sketch code"></textarea>
@@ -136,10 +117,10 @@
         <div id="keys" class="keys" aria-label="Symbols"></div>
         <div class="row edmeta"><span id="ed-pos"></span><span id="ed-saved"></span></div>
       </div>
-      <details class="libs">
+      <details id="libs-box" class="libs">
         <summary>Libraries</summary>
-        <p class="note">The kit’s libraries (DHT, SSD1306, GFX, IRremote, MFRC522, Keypad, Servo, Stepper) are always installed. Add any others here, one per line, named as in the Arduino Library Manager.</p>
-        <textarea id="libs" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Extra libraries, one per line" placeholder="Adafruit NeoPixel"></textarea>
+        <p class="note">These libraries are built into the app. Include one in your sketch and it’s added automatically.</p>
+        <ul id="libs-list" class="libs-list"><li>Loading…</li></ul>
       </details>
       <div class="row">
         <button id="build" class="primary" type="button">Compile</button>
@@ -148,11 +129,11 @@
       </div>
     </section>
 
-    <section id="s-out" aria-label="Compiler output" hidden>
+    <section id="s-out" aria-label="Compiler output">
       <div class="label">Build</div>
       <progress id="b-prog" hidden></progress>
       <p id="b-state" class="note" aria-live="polite"></p>
-      <a id="b-run" class="note" target="_blank" rel="noopener" hidden>Open the build on GitHub</a>
+      <p class="note" id="b-first">The first compile downloads the compiler (about 30 MB). After that it works offline.</p>
       <ul id="problems" class="problems"></ul>
       <details id="b-logbox" hidden><summary>Full compiler output</summary><pre id="b-log" class="code"></pre></details>
       <div class="label">Upload</div>
@@ -163,9 +144,14 @@
   </div>
 </main>
 <script src="parts-data.js"></script>
+<script src="sketches.js"></script>
 <script src="monitor.js"></script>
 <script src="flasher.js"></script>
 <script src="parts.js"></script>
 <script src="editor.js"></script>
+<script>
+// Keeps the app and the compiler on the phone so it works offline
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
 </body>
 </html>

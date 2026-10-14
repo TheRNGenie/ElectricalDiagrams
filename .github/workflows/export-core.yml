@@ -1,0 +1,60 @@
+name: Export board core for the in-app compiler
+
+# Collects the UNO R4 WiFi core, libraries and the gcc runtime libraries (hard-float Cortex-M4)
+# plus verbose reference builds, and commits them to tools/raw/ on the branch it runs on.
+# tools/build-pack.mjs turns that export into compiler/pack.tar.gz (see compiler/README.md).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install core and libraries
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:renesas_uno
+          arduino-cli lib install "DHT sensor library" "Adafruit Unified Sensor" "Adafruit SSD1306" "Adafruit GFX Library" "IRremote" "MFRC522" "Keypad" "Servo" "Stepper"
+      - name: Reference builds
+        run: |
+          mkdir -p tools/raw
+          for s in my_sketch dht11 oled servo; do
+            arduino-cli compile -v --fqbn arduino:renesas_uno:unor4wifi --build-path "build/$s" "sketches/$s" > "tools/raw/build-$s.txt" 2>&1 || true
+            cp "build/$s/$s.ino.bin" "tools/raw/ref-$s.bin" || true
+            cp "build/$s/$s.ino.map" "tools/raw/ref-$s.map" 2>/dev/null || true
+            ls -R "build/$s" > "tools/raw/buildtree-$s.txt"
+            cp "build/$s/sketch/$s.ino.cpp" "tools/raw/ref-$s.ino.cpp" || true
+          done
+      - name: Pack
+        run: |
+          A=~/.arduino15/packages/arduino
+          find $A -maxdepth 4 > tools/raw/tree.txt
+          HW=$(ls -d $A/hardware/renesas_uno/*/ | head -1)
+          GCC=$(ls -d $A/tools/arm-none-eabi-gcc/*/ | head -1)
+          echo "$HW $GCC" > tools/raw/paths.txt
+          # board core: cores, the UNO R4 WiFi variant, bundled libraries, platform files
+          tar czf tools/raw/core.tgz -C "$HW" cores variants/UNOWIFIR4 libraries platform.txt boards.txt
+          # kit libraries
+          tar czf tools/raw/libs.tgz -C ~/Arduino libraries
+          # gcc runtime: headers + hard-float Cortex-M4 libraries
+          find "$GCC" -path '*fpv4-sp*hard*' -type d > tools/raw/gcc-hard-dirs.txt
+          cd "$GCC"
+          tar czf "$GITHUB_WORKSPACE/tools/raw/gcc.tgz" \
+            arm-none-eabi/include \
+            $(find arm-none-eabi/lib -type d -path '*v7e-m*fpv4-sp*hard' ) \
+            $(find lib/gcc/arm-none-eabi -maxdepth 1 -mindepth 1 -type d | sed 's|$|/include|') \
+            $(find lib/gcc/arm-none-eabi -maxdepth 1 -mindepth 1 -type d | sed 's|$|/include-fixed|') \
+            $(find lib/gcc/arm-none-eabi -type d -path '*v7e-m*fpv4-sp*hard')
+          ls -la "$GITHUB_WORKSPACE/tools/raw"
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/raw
+          git commit -m "Export board core for the in-app compiler [skip ci]"
+          git push

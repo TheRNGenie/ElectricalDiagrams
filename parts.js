@@ -220,10 +220,9 @@ function select(id, scroll) {
   d.append(head);
   const what = document.createElement('p'); what.textContent = part.what; d.append(what);
   if (part.src && part.code == null) {
-    // sketch kept as a file in the repo: load it, then draw the page again
-    fetch(part.src, { cache: 'no-cache' }).then(r => r.ok ? r.text() : Promise.reject())
-      .then(t => { part.code = t; }, () => { part.code = '// Could not load ' + part.src + '. It loads once the page is served from GitHub Pages.'; })
-      .then(() => { if (current === part.id) select(part.id, false); });
+    // sketch kept in sketches/, built into the app by sketches.js
+    const n = part.src.split('/').pop().replace(/\.ino$/, '');
+    part.code = (window.SKETCHES || {})[n] ?? '';
   }
   if (part.info) { const b = document.createElement('div'); b.className = 'view'; b.innerHTML = BASICS; d.append(b); finish(scroll); return; }
 

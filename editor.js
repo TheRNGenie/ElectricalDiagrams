@@ -1,113 +1,35 @@
-// Code tab: edit a sketch on the phone, compile it with GitHub Actions, upload the result over USB.
-//   1. The sketch is committed to sketches/<name>/<name>.ino through the GitHub API ([skip ci], so the
-//      full kit build doesn't also start).
-//   2. The "Compile one sketch" workflow is started with a build id, and the page finds that run by it.
-//   3. The workflow commits bin/<name>.log (always) and bin/<name>.bin (when it builds); the page reads
-//      both back, lists the compiler errors against the editor's line numbers, and keeps the .bin
-//      ready for Upload to board.
-// The GitHub token lives only in this browser's localStorage and is only sent to api.github.com.
+// Code tab: edit a sketch on the phone, compile it in the page, upload it over USB.
+// Sketches are kept in this browser (localStorage); the kit's sketches are built into the app
+// (sketches.js). Compiling runs clang compiled to WebAssembly in a worker (compiler/worker.js),
+// so nothing here talks to GitHub or any other server.
 (() => {
 const $ = id => document.getElementById(id);
-const WORKFLOW = 'compile-one.yml';
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+const KIT = window.SKETCHES || {};
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} }
 };
-function defaultRepo() {
-  const m = location.hostname.match(/^([\w-]+)\.github\.io$/i);
-  const seg = location.pathname.split('/').filter(Boolean)[0];
-  return m && seg ? `${m[1]}/${seg}` : 'TheRNGenie/ElectricalDiagrams';
-}
-const cfg = {
-  token: store.get('bm-gh-token') || '',
-  repo: store.get('bm-gh-repo') || defaultRepo(),
-  branch: store.get('bm-gh-branch') || 'main'
-};
 
-// ---------- GitHub API ----------
-function apiError(status, msg) {
-  if (status === 401) return 'GitHub didn’t accept the token. It may have expired. Paste a new one under GitHub settings.';
-  if (status === 403 && /rate limit/i.test(msg)) return 'GitHub’s rate limit was reached. Wait a few minutes and try again.';
-  if (status === 403) return 'The token is missing a permission. It needs Contents and Actions set to “Read and write” for ' + cfg.repo + '.';
-  if (status === 404) return 'GitHub couldn’t find that in ' + cfg.repo + '. Check the repository name, and that the token can see it.';
-  if (status === 409) return 'The file changed on GitHub since it was opened here. Reload the sketch, then make your edits again.';
-  return 'GitHub said: ' + (msg || 'error ' + status);
-}
-async function gh(path, { method = 'GET', body, accept = 'application/vnd.github+json', raw = false } = {}) {
-  const headers = { Accept: accept, Authorization: 'Bearer ' + cfg.token };
-  if (body) headers['Content-Type'] = 'application/json';
-  let res;
-  try { res = await fetch('https://api.github.com' + path, { method, headers, cache: 'no-store', body: body ? JSON.stringify(body) : undefined }); }
-  catch { throw new Error('Couldn’t reach GitHub. Check the phone’s internet connection.'); }
-  if (!res.ok) {
-    let msg = ''; try { msg = (await res.json()).message || ''; } catch {}
-    const e = new Error(apiError(res.status, msg)); e.status = res.status; throw e;
-  }
-  if (raw) return res;
-  return res.status === 204 ? null : res.json().catch(() => null);
-}
-const repoPath = p => `/repos/${cfg.repo}/contents/${p.split('/').map(encodeURIComponent).join('/')}`;
-const b64enc = s => {
-  const b = new TextEncoder().encode(s); let out = '';
-  for (let i = 0; i < b.length; i += 0x8000) out += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
-  return btoa(out);
-};
-const b64dec = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g, '')), c => c.charCodeAt(0)));
-async function getFile(path, ref = cfg.branch) {
-  try { const j = await gh(repoPath(path) + '?ref=' + encodeURIComponent(ref)); return { text: b64dec(j.content || ''), sha: j.sha }; }
-  catch (e) { if (e.status === 404) return null; throw e; }
-}
-async function putFile(path, text, sha, message) {
-  const j = await gh(repoPath(path), { method: 'PUT', body: { message, content: b64enc(text), branch: cfg.branch, ...(sha ? { sha } : {}) } });
-  return j.content.sha;
-}
-async function getBytes(path, ref) {
-  const res = await gh(repoPath(path) + '?ref=' + encodeURIComponent(ref), { accept: 'application/vnd.github.raw', raw: true });
-  return new Uint8Array(await res.arrayBuffer());
+// ---------- Saved sketches ----------
+// { name: { text, updated } }, newest edits win; kit sketches appear until you save your own copy
+let mine = {};
+try { mine = JSON.parse(store.get('bm-sketches')) || {}; } catch {}
+const saveAll = () => store.set('bm-sketches', JSON.stringify(mine));
+if (!mine.my_sketch && KIT.my_sketch) { mine.my_sketch = { text: KIT.my_sketch, updated: Date.now() }; saveAll(); }
+const TEMPLATE = `// Prints name=value pairs at 115200 baud so Board Monitor can plot them.
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_BUILTIN, OUTPUT);
 }
 
-// ---------- GitHub settings ----------
-function renderSetup() {
-  const has = !!cfg.token;
-  $('gh-form').hidden = has && !$('gh-form').dataset.open;
-  $('gh-summary').hidden = !$('gh-form').hidden;
-  $('gh-who').textContent = cfg.repo + ' · ' + cfg.branch;
-  $('gh-token').value = ''; $('gh-token').placeholder = has ? 'Saved. Paste a new token to replace it' : 'github_pat_…';
-  $('gh-repo').value = cfg.repo; $('gh-branch').value = cfg.branch;
-  const owner = cfg.repo.split('/')[0];
-  $('gh-new').href = 'https://github.com/settings/personal-access-tokens/new?name=' + encodeURIComponent('Board Monitor') +
-    '&description=' + encodeURIComponent('Compile sketches from the Board Monitor page') +
-    '&target_name=' + encodeURIComponent(owner) + '&expires_in=90&contents=write&actions=write';
-  $('s-editor').hidden = !has; $('s-out').hidden = !has;
+void loop() {
+  digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+  Serial.print("a0=");
+  Serial.println(analogRead(A0));
+  delay(200);
 }
-$('gh-change').onclick = () => { $('gh-form').dataset.open = '1'; renderSetup(); };
-$('gh-form').onsubmit = async e => {
-  e.preventDefault();
-  const token = $('gh-token').value.trim() || cfg.token;
-  const repo = $('gh-repo').value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$|\/$/g, '');
-  const branch = $('gh-branch').value.trim() || 'main';
-  const note = $('gh-note');
-  if (!token) { note.textContent = 'Paste a token first.'; note.className = 'note err'; return; }
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { note.textContent = 'Write the repository as owner/name.'; note.className = 'note err'; return; }
-  const old = { ...cfg };
-  Object.assign(cfg, { token, repo, branch });
-  note.textContent = 'Checking…'; note.className = 'note';
-  try {
-    await gh(`/repos/${repo}/branches/${encodeURIComponent(branch)}`);
-    store.set('bm-gh-token', token); store.set('bm-gh-repo', repo); store.set('bm-gh-branch', branch);
-    note.textContent = ''; delete $('gh-form').dataset.open;
-    renderSetup(); loadList(sketch?.name || store.get('bm-sketch') || 'my_sketch');
-  } catch (err) {
-    Object.assign(cfg, old);
-    note.textContent = err.message; note.className = 'note err';
-  }
-};
-$('gh-forget').onclick = () => {
-  store.set('bm-gh-token', null); cfg.token = '';
-  delete $('gh-form').dataset.open; $('gh-note').textContent = 'Token removed from this phone.'; $('gh-note').className = 'note';
-  renderSetup();
-};
+`;
 
 // ---------- Editor ----------
 const ta = $('code'), gutter = $('gutter');
@@ -142,17 +64,17 @@ function newline() {
 }
 // Enter keeps the indent (and adds one after “{”). beforeinput catches Android keyboards, which send no usable key codes.
 ta.addEventListener('beforeinput', e => {
-  if (e.inputType === 'insertLineBreak' || (e.inputType === 'insertParagraph')) { e.preventDefault(); newline(); }
+  if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') { e.preventDefault(); newline(); }
 });
 ta.addEventListener('keydown', e => {
   if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); insert('  '); }
 });
-let draftTimer = null;
+let saveTimer = null;
 ta.addEventListener('input', () => {
-  renderGutter(); caret(); edited();
-  clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 400);
+  renderGutter(); caret();
+  clearTimeout(saveTimer); saveTimer = setTimeout(save, 300);
+  if (bin && binFor === current) setFlashNote('Upload sends the last compiled version. Compile again to include your newest edits.');
 });
-$('libs').addEventListener('input', () => { edited(); clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 400); });
 
 // Symbols that are slow to reach on a phone keyboard
 const KEYS = ['⇥', '{', '}', '(', ')', ';', '<', '>', '=', '"', "'", '[', ']', '#', '&', '|', '!', '+', '-', '*', '/', ':', ',', '_', '%', '↶', '↷'];
@@ -183,139 +105,131 @@ function gotoLine(line, col = 1) {
   caret();
 }
 
-// ---------- Sketches ----------
-let sketch = null;   // { name, sha, remote, libsSha, libsRemote }
-let names = [];
+// ---------- Choosing a sketch ----------
+let current = null;
 let bin = null, binFor = null, busy = false;
-const inoPath = n => `sketches/${n}/${n}.ino`;
-const libsPath = n => `sketches/${n}/libraries.txt`;
-const TEMPLATE = `// Prints name=value pairs at 115200 baud so Board Monitor can plot them.
-
-void setup() {
-  Serial.begin(115200);
-  pinMode(LED_BUILTIN, OUTPUT);
+function save() {
+  if (!current) return;
+  const kitText = KIT[current];
+  if (!mine[current] && ta.value === kitText) return;       // an untouched kit sketch stays a kit sketch
+  mine[current] = { text: ta.value, updated: Date.now() };
+  saveAll(); status();
+  if (!$('sk-pick').querySelector(`optgroup[data-g="mine"] option[value="${current}"]`)) fillPicker();
 }
-
-void loop() {
-  digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-  Serial.print("a0=");
-  Serial.println(analogRead(A0));
-  delay(200);
-}
-`;
-function saveDraft() {
-  if (!sketch) return;
-  const libs = $('libs').value;
-  const same = ta.value === (sketch.remote ?? TEMPLATE) && libs === (sketch.libsRemote ?? '');
-  store.set('bm-draft:' + sketch.name, same ? null : JSON.stringify({ text: ta.value, libs }));
-}
-function isEdited() { return sketch && (sketch.remote == null || ta.value !== sketch.remote || $('libs').value !== (sketch.libsRemote ?? '')); }
-function edited() {
+function status() {
   const st = $('ed-saved');
-  if (!sketch) { st.textContent = ''; return; }
-  st.textContent = sketch.remote == null ? 'New, not on GitHub yet' : isEdited() ? 'Edited, saved on this phone' : 'Same as GitHub';
-  if (bin && binFor === sketch.name && isEdited()) setFlashNote('Upload sends the last compiled version, not your newest edits.');
+  if (!current) { st.textContent = ''; return; }
+  const kit = KIT[current] != null;
+  st.textContent = mine[current] ? (kit && mine[current].text !== KIT[current] ? 'Your copy, saved on this phone' : 'Saved on this phone') : 'Kit example';
+  $('sk-reset').hidden = !(kit && mine[current] && mine[current].text !== KIT[current]);
+  $('sk-delete').hidden = !mine[current] || kit;
 }
-function fillPicker(current) {
+function fillPicker() {
   const pick = $('sk-pick'); pick.textContent = '';
-  for (const n of names) { const o = document.createElement('option'); o.value = n; o.textContent = n; pick.append(o); }
-  pick.value = current;
+  const group = (label, key, names) => {
+    if (!names.length) return;
+    const g = document.createElement('optgroup'); g.label = label; g.dataset.g = key;
+    for (const n of names) { const o = document.createElement('option'); o.value = n; o.textContent = n; g.append(o); }
+    pick.append(g);
+  };
+  const own = Object.keys(mine).sort((a, b) => (b === 'my_sketch') - (a === 'my_sketch') || a.localeCompare(b));
+  group('Your sketches', 'mine', own);
+  group('Kit examples', 'kit', Object.keys(KIT).filter(n => !mine[n]).sort());
+  if (current) pick.value = current;
 }
-async function loadList(open) {
-  setState('Loading sketches…');
-  try {
-    const items = await gh(repoPath('sketches') + '?ref=' + encodeURIComponent(cfg.branch));
-    names = items.filter(i => i.type === 'dir').map(i => i.name).sort((a, b) => (b === 'my_sketch') - (a === 'my_sketch') || a.localeCompare(b));
-  } catch (e) { if (e.status !== 404) { setState(e.message, 'err'); return; } names = []; }
-  if (!names.includes(open)) open = names[0] || 'my_sketch';
-  if (!names.includes(open)) names.unshift(open);
-  await openSketch(open);
-}
-async function openSketch(name) {
+function open(name) {
   if (busy) return;
-  fillPicker(name);
-  setState('Opening ' + name + '…'); ta.disabled = true;
-  try {
-    const [ino, libs] = await Promise.all([getFile(inoPath(name)), getFile(libsPath(name))]);
-    sketch = { name, sha: ino?.sha, remote: ino?.text ?? null, libsSha: libs?.sha, libsRemote: libs?.text ?? null };
-    store.set('bm-sketch', name);
-    let text = ino ? ino.text : TEMPLATE, libText = libs?.text ?? '';
-    let draft = null; try { draft = JSON.parse(store.get('bm-draft:' + name)); } catch {}
-    if (draft && (draft.text !== text || (draft.libs ?? '') !== libText)) { text = draft.text; libText = draft.libs ?? ''; $('ed-draft').hidden = false; }
-    else $('ed-draft').hidden = true;
-    ta.value = text; $('libs').value = libText;
-    marks = new Map(); renderGutter(); ta.scrollTop = 0; ta.setSelectionRange(0, 0); caret(); edited();
-    if (binFor !== name) { bin = null; binFor = null; $('flash').disabled = true; setFlashNote('Compile first, then upload over the USB cable.'); }
-    clearOutput();
-    setState(ino ? 'Ready. Compile builds it on GitHub, then Upload to board puts it on the R4.' : 'New sketch. Compile saves it to GitHub and builds it.');
-  } catch (e) { setState(e.message, 'err'); }
-  finally { ta.disabled = false; }
+  current = name;
+  store.set('bm-sketch', name);
+  ta.value = mine[name]?.text ?? KIT[name] ?? TEMPLATE;
+  marks = new Map(); renderGutter(); ta.scrollTop = 0; ta.setSelectionRange(0, 0); caret();
+  fillPicker(); status();
+  if (binFor !== name) { bin = null; binFor = null; $('flash').disabled = true; setFlashNote('Compile first, then upload over the USB cable.'); }
+  clearOutput();
+  setState(mine[name] || !KIT[name] ? 'Ready. Compile builds it right here on the phone.' : 'Kit example. Edits are saved as your own copy.');
 }
-$('sk-pick').onchange = () => openSketch($('sk-pick').value);
-$('ed-discard').onclick = () => {
-  if (!sketch) return;
-  store.set('bm-draft:' + sketch.name, null);
-  ta.value = sketch.remote ?? TEMPLATE; $('libs').value = sketch.libsRemote ?? '';
-  $('ed-draft').hidden = true; marks = new Map(); renderGutter(); caret(); edited();
+$('sk-pick').onchange = () => open($('sk-pick').value);
+$('sk-reset').onclick = () => {
+  if (!current || !confirm(`Put ${current} back to the kit version? Your changes to it will be lost.`)) return;
+  delete mine[current]; saveAll(); open(current);
+};
+$('sk-delete').onclick = () => {
+  if (!current || !confirm(`Delete ${current} from this phone?`)) return;
+  delete mine[current]; saveAll(); open(Object.keys(mine)[0] || 'my_sketch');
 };
 $('sk-new').onclick = () => { $('newrow').hidden = !$('newrow').hidden; if (!$('newrow').hidden) $('newname').focus(); };
+function validName(n) { return /^[A-Za-z][A-Za-z0-9_]{0,62}$/.test(n); }
 $('newrow').onsubmit = e => {
   e.preventDefault();
   const n = $('newname').value.trim().replace(/[\s-]+/g, '_');
   const note = $('newnote');
-  if (!/^[A-Za-z][A-Za-z0-9_]{0,62}$/.test(n)) { note.textContent = 'Use letters, numbers and _ only, starting with a letter.'; return; }
-  if (names.includes(n)) { note.textContent = 'There’s already a sketch called ' + n + '. Pick it from the list.'; return; }
+  if (!validName(n)) { note.textContent = 'Use letters, numbers and _ only, starting with a letter.'; return; }
+  if (mine[n] || KIT[n]) { note.textContent = 'There’s already a sketch called ' + n + '. Pick it from the list.'; return; }
   note.textContent = ''; $('newname').value = ''; $('newrow').hidden = true;
-  names.push(n); openSketch(n);
+  mine[n] = { text: TEMPLATE, updated: Date.now() }; saveAll(); open(n);
+};
+// .ino files in and out, so sketches can be backed up or moved to a computer
+$('sk-export').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ta.value], { type: 'text/plain' }));
+  a.download = current + '.ino'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$('sk-import').onclick = () => $('sk-file').click();
+$('sk-file').onchange = async () => {
+  const f = $('sk-file').files[0]; $('sk-file').value = '';
+  if (!f) return;
+  let n = f.name.replace(/\.(ino|cpp|txt)$/i, '').replace(/[^A-Za-z0-9_]/g, '_');
+  if (!/^[A-Za-z]/.test(n)) n = 's_' + n;
+  if (mine[n] && !confirm(`Replace your sketch ${n} with this file?`)) return;
+  mine[n] = { text: await f.text(), updated: Date.now() }; saveAll(); open(n);
 };
 
-// ---------- Build ----------
+// ---------- Compiler ----------
+let worker = null, nextId = 1;
+const pending = new Map();
+function compiler() {
+  if (worker) return worker;
+  worker = new Worker('compiler/worker.js', { type: 'module' });
+  worker.onmessage = ({ data }) => {
+    if (data.type === 'progress') { if (data.text) setState(data.text); setProgress(data.frac); return; }
+    const p = pending.get(data.id); if (p) { pending.delete(data.id); p(data); }
+  };
+  worker.onerror = e => { for (const p of pending.values()) p({ ok: false, stage: 'setup', log: 'The compiler stopped: ' + (e.message || 'unknown error') }); pending.clear(); worker = null; };
+  return worker;
+}
+const compile = (name, src) => new Promise(res => { const id = nextId++; pending.set(id, res); compiler().postMessage({ type: 'build', id, name, src }); });
+
 function setState(text, kind) { const s = $('b-state'); s.textContent = text; s.className = 'note' + (kind === 'err' ? ' err' : kind === 'ok' ? ' okline' : ''); }
+function setProgress(f) { const p = $('b-prog'); if (f == null || f >= 1) p.removeAttribute('value'); else p.value = f; }
 function setFlashNote(t, err) { const p = $('flash-note'); p.textContent = t; p.className = 'note' + (err ? ' err' : ''); }
-function clearOutput() { $('problems').textContent = ''; $('b-log').textContent = ''; $('b-logbox').hidden = true; $('b-run').hidden = true; }
+function clearOutput() { $('problems').textContent = ''; $('b-log').textContent = ''; $('b-logbox').hidden = true; }
 function lock(on) {
   busy = on;
   for (const id of ['build', 'build-up', 'sk-pick', 'sk-new']) $(id).disabled = on;
   $('flash').disabled = on || !bin;
   $('b-prog').hidden = !on;
 }
-let tick = null;
-function waiting(label, t0) {
-  clearInterval(tick);
-  const show = () => { const s = Math.round((Date.now() - t0) / 1000); setState(`${label} ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`); };
-  show(); tick = setInterval(show, 1000);
-}
-const STEP_LABEL = {
-  'Restore board core and libraries': 'Getting the board core ready…',
-  'Install board core and libraries': 'Installing the board core and libraries…',
-  'Compile': 'Compiling…',
-  'Commit results': 'Saving the result…'
-};
 
 function parseLog(text, name) {
-  const lines = text.split('\n'), head = {};
-  let i = 0;
-  for (; i < lines.length && lines[i].trim(); i++) { const m = lines[i].match(/^(\w+)=(.*)$/); if (m) head[m[1]] = m[2].trim(); }
-  const body = lines.slice(i + 1).join('\n');
   const seen = new Set(), problems = [];
-  for (const m of body.matchAll(/^(.+?):(\d+):(?:(\d+):)?\s*(fatal error|error|warning):\s*(.*)$/gm)) {
+  for (const m of text.matchAll(/^(.+?):(\d+):(?:(\d+):)?\s*(fatal error|error|warning):\s*(.*)$/gm)) {
     const [, file, line, col, kind, msg] = m;
     const key = file + line + msg; if (seen.has(key)) continue; seen.add(key);
-    const mine = file === inoPath(name) || file.endsWith('/' + name + '.ino');
+    const mine = file === name + '.ino';
     problems.push({ file, line: +line, col: +(col || 1), kind: kind === 'warning' ? 'warn' : 'err', msg, mine });
   }
-  for (const m of body.matchAll(/^.*undefined reference to [`'](.+?)'.*$/gm)) {
+  for (const m of text.matchAll(/undefined (?:symbol|reference to):? [`']?([^'`\s]+)/g)) {
     if (seen.has(m[1])) continue; seen.add(m[1]);
-    problems.push({ kind: 'err', msg: 'Linker: nothing defines ' + m[1] + '. Check the name, or add the library that provides it.' });
+    problems.push({ kind: 'err', msg: `Nothing defines ${m[1]}. Check the spelling, or that the function has a body.` });
   }
-  const size = body.match(/Sketch uses (\d+) bytes \((\d+)%\)/);
-  return { ok: head.result === 'ok', id: head.build_id, body, problems, size };
+  for (const m of text.matchAll(/ld\.lld: error: (?!undefined)(.*)/g)) problems.push({ kind: 'err', msg: m[1] });
+  return problems;
 }
 function showResult(r, name) {
+  const problems = parseLog(r.log || '', name);
   marks = new Map();
   const ul = $('problems'); ul.textContent = '';
-  // errors first, then warnings; problems in the sketch itself before ones inside libraries
-  const list = [...r.problems].sort((a, b) => (a.kind === 'warn') - (b.kind === 'warn') || (b.mine === true) - (a.mine === true));
+  const list = [...problems].sort((a, b) => (a.kind === 'warn') - (b.kind === 'warn') || (b.mine === true) - (a.mine === true));
   for (const p of list) {
     const li = document.createElement('li'); li.className = 'p' + p.kind;
     const where = p.mine ? `Line ${p.line}` : p.file ? `${p.file.split('/').pop()}:${p.line}` : '';
@@ -328,122 +242,64 @@ function showResult(r, name) {
       b.type = 'button'; b.onclick = () => gotoLine(p.line, p.col);
       if (marks.get(p.line) !== 'err') marks.set(p.line, p.kind);
     }
-    const lib = p.msg.match(/([\w./-]+\.h): No such file or directory/);
+    const lib = p.msg.match(/'([\w./-]+\.h)' file not found/);
     if (lib) {
       const hint = document.createElement('span'); hint.className = 'msg';
-      hint.textContent = `Add the library that provides ${lib[1]} under Libraries (its name as shown in the Arduino Library Manager), then compile again.`;
+      hint.textContent = `${lib[1]} isn’t one of the libraries built into the app. Open “Libraries” below to see which ones are.`;
       b.append(hint);
     }
     li.append(b); ul.append(li);
   }
-  if (!r.ok && !r.problems.length) {
+  if (!r.ok && !problems.length) {
     const li = document.createElement('li'); li.className = 'perr';
-    li.textContent = 'It didn’t compile, and the reason isn’t a line in the sketch. The full log below has the details.';
+    li.textContent = r.stage === 'setup' ? r.log : 'It didn’t build, and the reason isn’t a line in the sketch. The full output below has the details.';
     ul.append(li);
   }
   renderGutter();
-  $('b-log').textContent = r.body.trim();
-  $('b-logbox').hidden = false;
-  if (!r.ok) $('b-logbox').open = !r.problems.length;
+  $('b-log').textContent = (r.log || '').trim() || 'No messages.';
+  $('b-logbox').hidden = r.stage === 'setup';
+  $('b-logbox').open = !r.ok && !problems.length && r.stage !== 'setup';
+  return problems;
 }
 
 async function build(thenUpload) {
-  if (busy || !sketch) return;
-  const name = sketch.name;
+  if (busy || !current) return;
+  const name = current, src = ta.value;
   if (thenUpload) {
-    // a board must be picked while the tap still counts as a user action; the build takes a minute or two
+    // a board must be picked while the tap still counts as a user action
     if (!('serial' in navigator)) { setFlashNote('Uploading needs Web Serial. Use Chrome on Android or a computer.', true); return; }
     if (!window.boardMonitor.port && !(await navigator.serial.getPorts()).length) {
       try { setFlashNote('Pick the board in the list that opens.'); window.boardMonitor.port = await navigator.serial.requestPort(); setFlashNote(''); }
       catch { setFlashNote('No board picked. Plug the board in and try again.', true); return; }
     }
   }
-  lock(true); clearOutput(); clearInterval(tick);
-  try {
-    // 1. save to GitHub
-    const text = ta.value, libs = $('libs').value;
-    if (sketch.remote == null || text !== sketch.remote) {
-      setState('Saving to GitHub…');
-      sketch.sha = await putFile(inoPath(name), text, sketch.sha, `Edit ${name} from Board Monitor [skip ci]`);
-      sketch.remote = text;
-    }
-    if (libs !== (sketch.libsRemote ?? '') && (libs.trim() || sketch.libsSha)) {
-      sketch.libsSha = await putFile(libsPath(name), libs, sketch.libsSha, `Set ${name} libraries from Board Monitor [skip ci]`);
-      sketch.libsRemote = libs;
-    }
-    $('ed-draft').hidden = true; saveDraft(); edited();
-
-    // 2. start the build and find its run
-    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    const since = new Date(Date.now() - 2 * 60000).toISOString().replace(/\.\d+Z$/, 'Z');
-    const t0 = Date.now();
-    setState('Starting the build…');
-    try {
-      await gh(`/repos/${cfg.repo}/actions/workflows/${WORKFLOW}/dispatches`, { method: 'POST', body: { ref: cfg.branch, inputs: { sketch: name, build_id: id } } });
-    } catch (e) {
-      if (e.status === 404) throw new Error(`The “Compile one sketch” workflow isn’t on the ${cfg.branch} branch of ${cfg.repo} yet.`);
-      throw e;
-    }
-    waiting('Waiting for GitHub to start the build…', t0);
-    let run = null;
-    while (!run) {
-      if (Date.now() - t0 > 120000) throw new Error('GitHub didn’t start the build. Open the repo’s Actions tab to check it.');
-      await sleep(3000);
-      const j = await gh(`/repos/${cfg.repo}/actions/workflows/${WORKFLOW}/runs?event=workflow_dispatch&per_page=20&created=${encodeURIComponent('>=' + since)}`);
-      run = j.workflow_runs.find(r => (r.display_title || r.name || '').includes(`(${id})`));
-    }
-    $('b-run').href = run.html_url; $('b-run').hidden = false;
-
-    // 3. wait for it
-    let label = '';
-    while (run.status !== 'completed') {
-      const next = run.status === 'in_progress' ? (await currentStep(run.id)) : 'Waiting for a GitHub computer…';
-      if (next !== label) { label = next; waiting(label, t0); }
-      await sleep(4000);
-      run = await gh(`/repos/${cfg.repo}/actions/runs/${run.id}`);
-    }
-    clearInterval(tick);
-
-    // 4. read the result at one commit, so the log and the .bin match
-    setState('Reading the result…');
-    const ref = (await gh(`/repos/${cfg.repo}/git/ref/heads/${encodeURIComponent(cfg.branch)}`)).object.sha;
-    const log = await getFile(`bin/${name}.log`, ref);
-    const r = log && parseLog(log.text, name);
-    if (!r || r.id !== id) {
-      if (run.conclusion === 'cancelled') throw new Error('A newer build of this sketch replaced this one.');
-      throw new Error('The build stopped before compiling. Tap “Open the build on GitHub” to see why.');
-    }
-    showResult(r, name);
-    const secs = Math.round((Date.now() - t0) / 1000);
-    if (!r.ok) {
-      const n = r.problems.filter(p => p.kind === 'err').length;
-      setState(`It didn’t compile${n ? `: ${n} error${n > 1 ? 's' : ''}` : ''}. Tap one to jump to its line.`, 'err');
-      return;
-    }
-    bin = await getBytes(`bin/${name}.bin`, ref); binFor = name;
-    const w = r.problems.length;
-    setState(`Compiled in ${secs} s.` + (r.size ? ` Uses ${(+r.size[1]).toLocaleString()} bytes (${r.size[2]}% of flash).` : '') + (w ? ` ${w} warning${w > 1 ? 's' : ''}.` : ''), 'ok');
-    setFlashNote('Ready to upload ' + name + '.');
-    lock(false);
-    if (thenUpload) await flash();
-  } catch (e) {
-    clearInterval(tick);
-    setState(e.message || String(e), 'err');
-  } finally { clearInterval(tick); if (busy) lock(false); }
-}
-async function currentStep(runId) {
-  try {
-    const j = await gh(`/repos/${cfg.repo}/actions/runs/${runId}/jobs`);
-    const step = j.jobs[0]?.steps?.find(s => s.status === 'in_progress');
-    return STEP_LABEL[step?.name] || 'Getting the build ready…';
-  } catch { return 'Building…'; }
+  save();
+  lock(true); clearOutput(); setProgress(null);
+  setState(worker ? 'Compiling…' : 'Starting the compiler…');
+  const t0 = performance.now();
+  const r = await compile(name, src);
+  lock(false);
+  if (r.stage !== 'setup') { store.set('bm-compiler', '1'); $('b-first').hidden = true; }
+  if (current !== name) return;
+  const problems = showResult(r, name);
+  if (!r.ok) {
+    const n = problems.filter(p => p.kind === 'err').length;
+    setState(r.stage === 'setup' ? 'The compiler couldn’t start.' : `It didn’t compile${n ? `: ${n} error${n > 1 ? 's' : ''}` : ''}.${problems.some(p => p.mine) ? ' Tap one to jump to its line.' : ''}`, 'err');
+    return;
+  }
+  bin = r.bin; binFor = name;
+  const secs = ((performance.now() - t0) / 1000).toFixed(1), w = problems.length;
+  setState(`Compiled in ${secs} s. Uses ${bin.length.toLocaleString()} bytes of flash (${Math.round(100 * bin.length / 262144)}%) and ${r.ram.toLocaleString()} bytes of RAM (${Math.round(100 * r.ram / 32768)}%).` + (w ? ` ${w} warning${w > 1 ? 's' : ''}.` : ''), 'ok');
+  setFlashNote('Ready to upload ' + name + '.');
+  $('flash').disabled = false;
+  if (thenUpload) await flash();
 }
 
 // ---------- Upload ----------
 async function flash() {
   if (!bin || busy) return;
   const bar = $('flash-bar');
-  lock(true); bar.hidden = false; bar.value = 0; $('flash-mon').hidden = true;
+  lock(true); $('b-prog').hidden = true; bar.hidden = false; bar.value = 0; $('flash-mon').hidden = true;
   try {
     await window.R4Flasher.uploadToBoard(bin, (t, f) => { setFlashNote(t); if (f != null) bar.value = f; });
     setFlashNote('Uploaded ' + binFor + '. It’s running on the board now.');
@@ -457,20 +313,33 @@ $('build-up').onclick = () => build(true);
 $('flash').onclick = flash;
 $('flash-mon').onclick = () => { window.showView('monitor'); scrollTo(0, 0); window.boardMonitor.connectUSB(); };
 
+// ---------- Libraries built into the app ----------
+$('libs-box').addEventListener('toggle', async () => {
+  if (!$('libs-box').open || $('libs-list').dataset.done) return;
+  try {
+    const pack = await (await fetch('compiler/pack.json')).json();
+    const byLib = {};
+    for (const [h, n] of Object.entries(pack.headers)) if (!h.includes('/')) (byLib[n] ??= []).push(h);
+    $('libs-list').textContent = '';
+    for (const n of Object.keys(pack.libs).sort((a, b) => a.localeCompare(b))) {
+      const li = document.createElement('li');
+      const b = document.createElement('b'); b.textContent = n.replace(/_/g, ' ');
+      const c = document.createElement('code'); const key = n.toLowerCase().replace(/^(arduino|adafruit)_|_library$/g, '').replace(/_/g, '');
+      c.textContent = (byLib[n] || []).filter(h => /\.h(pp)?$/.test(h)).sort((a, b) => b.toLowerCase().replace(/_/g, '').includes(key) - a.toLowerCase().replace(/_/g, '').includes(key)).slice(0, 2).map(h => `#include <${h}>`).join('  ');
+      li.append(b, ' ', c); $('libs-list').append(li);
+    }
+    $('libs-list').dataset.done = '1';
+  } catch { $('libs-list').textContent = 'Couldn’t read the library list.'; }
+});
+
 // ---------- Start ----------
-let started = false;
 window.codeEditor = {
   open(name) {
-    store.set('bm-sketch', name);
     window.showView('code'); scrollTo(0, 0);
-    if (!started || !cfg.token || busy || sketch?.name === name) return;   // a first visit loads it from bm-sketch
-    if (!names.includes(name)) names.push(name);
-    openSketch(name);
+    if (!busy && current !== name) open(name);
   }
 };
-// load sketches the first time the tab is shown
-new MutationObserver(() => {
-  if (!$('view-code').hidden && !started) { started = true; if (cfg.token && !sketch) loadList(store.get('bm-sketch') || 'my_sketch'); }
-}).observe($('view-code'), { attributes: true, attributeFilter: ['hidden'] });
-renderSetup(); renderGutter();
+$('b-first').hidden = !!store.get('bm-compiler');
+const first = store.get('bm-sketch');
+open(first && (mine[first] || KIT[first]) ? first : 'my_sketch');
 })();
