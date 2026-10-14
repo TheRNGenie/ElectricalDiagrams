@@ -8,3 +8,13 @@ A phone-friendly page for the Arduino UNO R4 WiFi in the ELEGOO starter kit.
 - **Build planner:** tick several parts to check they don't need the same board pin.
 
 Served with GitHub Pages from the `main` branch root. USB needs the https address.
+
+## Android app
+
+`android/` wraps the same page as an installable Android app with the compiler built in, so it needs no web address, no browser and no connection. USB goes through Android's own USB host support (`UsbSerialBridge.java`), which `native-bridge.js` presents to the page as Web Serial.
+
+Every push to `main` builds it with GitHub Actions and publishes it here:
+https://github.com/TheRNGenie/ElectricalDiagrams/releases/download/android/BoardMonitor.apk
+
+To install: open that link on the phone, download, tap the file and allow installs from this source when Android asks. Plug the board in with a USB-C cable; Android offers to open Board Monitor, and ticking "Always" skips the USB question next time.
+

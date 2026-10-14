@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.therngenie.boardmonitor'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.therngenie.boardmonitor'
+        minSdk 26
+        targetSdk 34
+        // CI passes its run number so every new APK installs over the last one
+        versionCode((project.findProperty('versionCode') ?: '1') as int)
+        versionName "1.${versionCode}"
+    }
+
+    signingConfigs {
+        // One fixed key, so updates install over the old app and keep the sketches saved in it
+        release {
+            storeFile file('board-monitor.jks')
+            storePassword 'boardmonitor'
+            keyAlias 'board-monitor'
+            keyPassword 'boardmonitor'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+        debug {
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}

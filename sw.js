@@ -1,8 +1,8 @@
 // Keeps Board Monitor on the phone so it opens and compiles without a connection.
 // App files: network first (so updates arrive), falling back to the saved copy.
 // The compiler and the compiled kit sketches: saved the first time they're used, then served from the phone.
-const VERSION = 'bm-1';
-const SHELL = ['./', 'index.html', 'app.css', 'monitor.js', 'flasher.js', 'parts-data.js', 'parts.js', 'sketches.js', 'editor.js',
+const VERSION = 'bm-2';
+const SHELL = ['./', 'index.html', 'app.css', 'native-bridge.js', 'monitor.js', 'flasher.js', 'parts-data.js', 'parts.js', 'sketches.js', 'editor.js',
   'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png',
   'compiler/worker.js', 'compiler/build.js', 'compiler/flags.js', 'compiler/ino.js', 'compiler/pack.json'];
 const FOREVER = /\/(compiler\/|bin\/)/;

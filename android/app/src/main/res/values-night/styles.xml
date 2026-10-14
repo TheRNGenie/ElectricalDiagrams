@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- A dark parent theme also tells the page to use its dark colors -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">#3fcf9d</item>
+        <item name="android:colorPrimaryDark">#0f1412</item>
+        <item name="android:colorAccent">#3fcf9d</item>
+        <item name="android:statusBarColor">#0f1412</item>
+        <item name="android:navigationBarColor">#0f1412</item>
+        <item name="android:windowBackground">@color/bg</item>
+    </style>
+    <color name="bg">#0f1412</color>
+</resources>

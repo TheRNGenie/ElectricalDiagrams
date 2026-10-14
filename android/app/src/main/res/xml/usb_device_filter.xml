@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Arduino boards, including the UNO R4 WiFi -->
+    <usb-device vendor-id="9025" />
+    <!-- Espressif ESP32-S2/S3/C3 native USB -->
+    <usb-device vendor-id="12346" />
+    <!-- Raspberry Pi Pico -->
+    <usb-device vendor-id="11914" />
+</resources>

@@ -170,6 +170,7 @@ $('newrow').onsubmit = e => {
 };
 // .ino files in and out, so sketches can be backed up or moved to a computer
 $('sk-export').onclick = () => {
+  if (window.AndroidApp) { window.AndroidApp.saveText(current + '.ino', ta.value); return; }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([ta.value], { type: 'text/plain' }));
   a.download = current + '.ino'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
